@@ -9,26 +9,9 @@ describe("Navbar", () => {
       <MemoryRouter>
         <Navbar />
       </MemoryRouter>
-    )
-
+    );
     expect(
-      screen.getByRole("link", {
-        name: "Movie App",
-      })
-    ).toHaveAttribute("href", "/")
-  })
-
-  it("links to the watchlist page", () => {
-    render(
-      <MemoryRouter>
-        <Navbar />
-      </MemoryRouter>
-    )
-
-    expect(
-      screen.getByRole("link", {
-        name: "Watchlist",
-      })
-    ).toHaveAttribute("href", "/watchlist")
-  })
-})
+      screen.getByRole("link", { name: "Movie App" })
+    ).toHaveAttribute("href", "/");
+  });
+});

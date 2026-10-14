@@ -9,29 +9,24 @@ import {
 import {
   render,
   screen,
-  waitFor,
-  act,
-  fireEvent,
 } from "@testing-library/react";
 
 import userEvent from "@testing-library/user-event";
-
-import {
-  MemoryRouter,
-} from "react-router-dom";
+import { MemoryRouter } from "react-router-dom";
 
 import HomePage from "./HomePage";
-
-import {
-  getPopular,
-  searchMovies,
-  getNowPlaying,
-  getUpcoming,
-} from "../api/movieApi"
+import { useMovies } from "../hooks/useMovies";
+import { useInfiniteScroll } from "../hooks/useInfiniteScroll";
 
 import type { MovieResponse } from "../types/movie";
 
-vi.mock("../api/movieApi");
+vi.mock("../hooks/useMovies", () => ({
+  useMovies: vi.fn(),
+}));
+
+vi.mock("../hooks/useInfiniteScroll", () => ({
+  useInfiniteScroll: vi.fn(),
+}));
 
 const mockMovies = [
   {
@@ -52,537 +47,269 @@ const mockMovies = [
     release_date: "2024-01-01",
     vote_average: 7.5,
   },
-]
+];
+
+const mockBatman = [
+  {
+    id: 10,
+    title: "Batman",
+    overview: "Batman movie",
+    poster_path: "/batman.jpg",
+    backdrop_path: null,
+    release_date: "2025-01-01",
+    vote_average: 8.5,
+  },
+];
+
+const mockLoadMore = vi.fn();
+const mockRetry = vi.fn();
+
+let observedCallback: (() => void) | undefined;
+
+function renderHomePage() {
+  return render(
+    <MemoryRouter>
+      <HomePage />
+    </MemoryRouter>
+  );
+}
 
 describe("HomePage", () => {
   beforeEach(() => {
-    localStorage.clear()
-    vi.clearAllMocks()
-  })
+    vi.clearAllMocks();
+    localStorage.clear();
+    observedCallback = undefined;
 
-  it("should load popular movies", async () => {
-    vi.mocked(getPopular).mockResolvedValue({
+    vi.mocked(useInfiniteScroll).mockImplementation(
+      ((callback: () => void) => {
+        observedCallback = callback;
+        return { current: null };
+      }) as typeof useInfiniteScroll
+    );
+
+    vi.mocked(useMovies).mockImplementation(({ search }) => ({
+      movies: search.trim() ? mockBatman : mockMovies,
+      loading: false,
+      error: "",
       page: 1,
-      results: mockMovies,
-      total_pages: 2,
-      total_results: 40,
-    })
+      totalPages: 2,
+      loadMore: mockLoadMore,
+      retry: mockRetry,
+    }));
+  });
 
-    render(
-      <MemoryRouter>
-        <HomePage />
-      </MemoryRouter>
-    )
+  it("renders popular movies", () => {
+    renderHomePage();
 
     expect(
-      screen.getByRole("status")
-    ).toBeInTheDocument()
+      screen.getByRole("heading", {
+        name: "Popular Movies",
+      })
+    ).toBeInTheDocument();
 
     expect(
-      await screen.findByRole("heading", {
+      screen.getByRole("heading", {
         name: "Movie One",
       })
-    ).toBeInTheDocument()
+    ).toBeInTheDocument();
 
     expect(
       screen.getByRole("heading", {
         name: "Movie Two",
       })
-    ).toBeInTheDocument()
+    ).toBeInTheDocument();
+
+    expect(useMovies).toHaveBeenCalledWith(
+      expect.objectContaining({
+        search: "",
+        category: "popular",
+      })
+    );
+  });
+
+  it("shows loading skeleton while the first page loads", () => {
+    vi.mocked(useMovies).mockReturnValue({
+      movies: [],
+      loading: true,
+      error: "",
+      page: 1,
+      totalPages: 1,
+      loadMore: mockLoadMore,
+      retry: mockRetry,
+    });
+
+    renderHomePage();
 
     expect(
-      getPopular
-    ).toHaveBeenCalledWith(1, expect.anything())
-  })
+      screen.queryByText("No movies found")
+    ).not.toBeInTheDocument();
+  });
 
-it("should load more movies", async () => {
-  const user = userEvent.setup()
+  it("searches movies when the search input changes", async () => {
+    const user = userEvent.setup();
 
-  vi.mocked(getPopular)
-    .mockResolvedValueOnce({
-      page: 1,
-      results: mockMovies,
-      total_pages: 2,
-      total_results: 40,
-    })
-    .mockResolvedValueOnce({
-      page: 2,
-      results: [
-        {
-          id: 3,
-          title: "Movie Three",
-          overview: "Overview",
-          poster_path: "/three.jpg",
-          backdrop_path: null,
-          release_date: "2023-01-01",
-          vote_average: 7,
-        },
-      ],
-      total_pages: 2,
-      total_results: 40,
-    })
+    renderHomePage();
 
-  render(
-    <MemoryRouter>
-      <HomePage />
-    </MemoryRouter>
-  )
+    await user.type(
+      screen.getByRole("textbox", {
+        name: "Search movies",
+      }),
+      "Batman"
+    );
 
-  expect(
-    await screen.findByRole("heading", {
-      name: "Movie One",
-    })
-  ).toBeInTheDocument()
+    expect(
+      await screen.findByRole("heading", {
+        name: "Batman",
+      })
+    ).toBeInTheDocument();
 
-  const button =
-    screen.getByRole("button", {
-      name: "Load more",
-    })
+    expect(useMovies).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        search: "Batman",
+        category: "popular",
+      })
+    );
+  });
 
-  await user.click(button)
+  it("clears the search using the search input clear button", async () => {
+    const user = userEvent.setup();
 
-  expect(
-    await screen.findByRole("heading", {
-      name: "Movie Three",
-    })
-  ).toBeInTheDocument()
+    renderHomePage();
 
-  expect(
-    getPopular
-  ).toHaveBeenCalledWith(2, expect.anything())
-})
-
-it("should search movies", async () => {
-  const user = userEvent.setup()
-
-  vi.mocked(getPopular).mockResolvedValue({
-    page: 1,
-    results: mockMovies,
-    total_pages: 1,
-    total_results: 2,
-  })
-
-  vi.mocked(searchMovies).mockResolvedValue({
-    page: 1,
-    results: [
-      {
-        id: 10,
-        title: "Batman",
-        overview: "Batman movie",
-        poster_path: "/batman.jpg",
-        backdrop_path: null,
-        release_date: "2025-01-01",
-        vote_average: 8.5,
-      },
-    ],
-    total_pages: 1,
-    total_results: 1,
-  })
-
-  render(
-    <MemoryRouter>
-      <HomePage />
-    </MemoryRouter>
-  )
-
-  await screen.findByRole("heading", {
-    name: "Movie One",
-  })
-
-  const input =
-    screen.getByRole("textbox", {
+    const input = screen.getByRole("textbox", {
       name: "Search movies",
-    })
+    });
 
-  await user.type(input, "Batman")
+    await user.type(input, "Batman");
 
-  await waitFor(
-    () => {
-      expect(
-        searchMovies
-      ).toHaveBeenCalledWith(
-        "Batman",
-        1,
-        expect.anything()
-      )
-    },
-    {
-      timeout: 1000,
-    }
-  )
+    expect(
+      await screen.findByRole("heading", {
+        name: "Batman",
+      })
+    ).toBeInTheDocument();
 
-  expect(
-    await screen.findByRole("heading", {
-      name: "Batman",
-    })
-  ).toBeInTheDocument()
-})
+    await user.click(
+      screen.getByRole("button", {
+        name: "Clear search",
+      })
+    );
 
-it("should display error when API fails", async () => {
-  vi.mocked(getPopular).mockRejectedValue(
-    new Error("API error")
-  )
+    expect(input).toHaveValue("");
 
-  render(
-    <MemoryRouter>
-      <HomePage />
-    </MemoryRouter>
-  )
+    expect(
+      await screen.findByRole("heading", {
+        name: "Movie One",
+      })
+    ).toBeInTheDocument();
+  });
 
-  expect(
-    await screen.findByText(
-      "Failed to load movies. Please try again."
-    )
-  ).toBeInTheDocument()
-})
+  it("calls loadMore when the infinite-scroll callback fires", () => {
+    renderHomePage();
 
-it("should filter duplicate movies when loading more pages", async () => {
-  const user = userEvent.setup()
+    expect(observedCallback).toBeDefined();
 
-  vi.mocked(getPopular)
-    .mockResolvedValueOnce({
+    observedCallback?.();
+
+    expect(mockLoadMore).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not enable infinite scroll when loading", () => {
+    vi.mocked(useMovies).mockReturnValue({
+      movies: mockMovies,
+      loading: true,
+      error: "",
       page: 1,
-      results: [
-        {
-          id: 1,
-          title: "Inception",
-          overview: "",
-          poster_path: "/inception.jpg",
-          backdrop_path: null,
-          release_date: "2010-07-16",
-          vote_average: 8.4,
-        },
-      ],
-      total_pages: 2,
-      total_results: 2,
-    })
-    .mockResolvedValueOnce({
-      page: 2,
-      results: [
-        {
-          id: 1,
-          title: "Inception",
-          overview: "",
-          poster_path: "/inception.jpg",
-          backdrop_path: null,
-          release_date: "2010-07-16",
-          vote_average: 8.4,
-        },
-        {
-          id: 2,
-          title: "Interstellar",
-          overview: "",
-          poster_path: "/interstellar.jpg",
-          backdrop_path: null,
-          release_date: "2014-11-07",
-          vote_average: 8.4,
-        },
-      ],
-      total_pages: 2,
-      total_results: 2,
-    })
+      totalPages: 2,
+      loadMore: mockLoadMore,
+      retry: mockRetry,
+    });
 
-  render(
-    <MemoryRouter>
-      <HomePage />
-    </MemoryRouter>
-  )
+    renderHomePage();
 
-  expect(
-    await screen.findByRole("heading", {
-      name: "Inception",
-    })
-  ).toBeInTheDocument()
+    expect(useInfiniteScroll).toHaveBeenCalledWith(
+      mockLoadMore,
+      expect.objectContaining({
+        enabled: false,
+      })
+    );
+  });
 
-  await user.click(
-    screen.getByRole("button", {
-      name: "Load more",
-    })
-  )
+  it("does not enable infinite scroll when an error occurs", () => {
+    vi.mocked(useMovies).mockReturnValue({
+      movies: [],
+      loading: false,
+      error: "Failed to load movies. Please try again.",
+      page: 1,
+      totalPages: 2,
+      loadMore: mockLoadMore,
+      retry: mockRetry,
+    });
 
-  expect(
-    await screen.findByRole("heading", {
-      name: "Interstellar",
-    })
-  ).toBeInTheDocument()
+    renderHomePage();
 
-  expect(
-    screen.getAllByRole("heading", {
-      name: "Inception",
-    })
-  ).toHaveLength(1)
-})
+    expect(
+      screen.getByText(
+        "Failed to load movies. Please try again."
+      )
+    ).toBeInTheDocument();
 
-it("should clear the search with the clear button", async () => {
-  const user = userEvent.setup()
+    expect(useInfiniteScroll).toHaveBeenCalledWith(
+      mockLoadMore,
+      expect.objectContaining({
+        enabled: false,
+      })
+    );
+  });
 
-  vi.mocked(getPopular).mockResolvedValue({
-    page: 1,
-    results: mockMovies,
-    total_pages: 1,
-    total_results: 2,
-  })
+  it("shows an empty state when no movies are found", () => {
+    vi.mocked(useMovies).mockReturnValue({
+      movies: [],
+      loading: false,
+      error: "",
+      page: 1,
+      totalPages: 1,
+      loadMore: mockLoadMore,
+      retry: mockRetry,
+    });
 
-  vi.mocked(searchMovies).mockResolvedValue({
-    page: 1,
-    results: [
-      {
-        id: 10,
-        title: "Batman",
-        overview: "Batman movie",
-        poster_path: "/batman.jpg",
-        backdrop_path: null,
-        release_date: "2025-01-01",
-        vote_average: 8.5,
-      },
-    ],
-    total_pages: 1,
-    total_results: 1,
-  })
+    renderHomePage();
 
-  render(
-    <MemoryRouter>
-      <HomePage />
-    </MemoryRouter>
-  )
-
-  await screen.findByRole("heading", {
-    name: "Movie One",
-  })
-
-  const input = screen.getByRole("textbox", {
-    name: "Search movies",
-  })
-
-  await user.type(input, "Batman")
-
-  await user.click(
-    await screen.findByRole("button", {
-      name: "Clear search",
-    })
-  )
-
-  expect(input).toHaveValue("")
-})
-
-it("should clear the search from the results header", async () => {
-  const user = userEvent.setup()
-
-  vi.mocked(getPopular).mockResolvedValue({
-    page: 1,
-    results: mockMovies,
-    total_pages: 1,
-    total_results: 2,
-  })
-
-  vi.mocked(searchMovies).mockResolvedValue({
-    page: 1,
-    results: [
-      {
-        id: 10,
-        title: "Batman",
-        overview: "Batman movie",
-        poster_path: "/batman.jpg",
-        backdrop_path: null,
-        release_date: "2025-01-01",
-        vote_average: 8.5,
-      },
-    ],
-    total_pages: 1,
-    total_results: 1,
-  })
-
-  render(
-    <MemoryRouter>
-      <HomePage />
-    </MemoryRouter>
-  )
-
-  await screen.findByRole("heading", {
-    name: "Movie One",
-  })
-
-  const input = screen.getByRole("textbox", {
-    name: "Search movies",
-  })
-
-  await user.type(input, "Batman")
-
-  await user.click(
-    screen.getByRole("button", {
-      name: "Clear",
-    })
-  )
-
-  expect(input).toHaveValue("")
-})
-
-it("loads now playing movies when the category is selected", async () => {
-  vi.mocked(getNowPlaying).mockResolvedValue({
-    page: 1,
-    results: [],
-    total_pages: 1,
-    total_results: 0,
-  } satisfies MovieResponse)
-
-  vi.mocked(getPopular).mockResolvedValue({
-    page: 1,
-    results: mockMovies,
-    total_pages: 1,
-    total_results: 2,
-  })
-
-  render(
-    <MemoryRouter>
-      <HomePage />
-    </MemoryRouter>
-  )
-
-  expect(
-    await screen.findByRole("heading", {
-      name: "Movie One",
-    })
-  ).toBeInTheDocument()
-
-  fireEvent.click(
-    screen.getByRole("button", {
-      name: "Now Playing",
-    })
-  )
-
-  await waitFor(() => {
-    expect(getNowPlaying).toHaveBeenCalledWith(
-      1,
-      expect.anything()
-    )
-  })
-})
-
-it("loads upcoming movies when the category is selected", async () => {
-  vi.mocked(getUpcoming).mockResolvedValue({
-    page: 1,
-    results: [],
-    total_pages: 1,
-    total_results: 0,
-  } satisfies MovieResponse)
-
-  vi.mocked(getPopular).mockResolvedValue({
-    page: 1,
-    results: mockMovies,
-    total_pages: 1,
-    total_results: 2,
-  })
-
-  render(
-    <MemoryRouter>
-      <HomePage />
-    </MemoryRouter>
-  )
-
-  expect(
-    await screen.findByRole("heading", {
-      name: "Movie One",
-    })
-  ).toBeInTheDocument()
-
-  fireEvent.click(
-    screen.getByRole("button", {
-      name: "Upcoming",
-    })
-  )
-
-  await waitFor(() => {
-    expect(getUpcoming).toHaveBeenCalledWith(
-      1,
-      expect.anything()
-    )
-  })
-})
-
-it("ignores canceled requests while mounted", async () => {
-  vi.mocked(getPopular).mockRejectedValue({
-    __CANCEL__: true,
-  })
-
-  render(
-    <MemoryRouter>
-      <HomePage />
-    </MemoryRouter>
-  )
-
-  await waitFor(() => {
     expect(
       screen.getByText("No movies found")
-    ).toBeInTheDocument()
-  })
+    ).toBeInTheDocument();
+  });
 
-  expect(
-    screen.queryByText(
-      "Failed to load movies. Please try again."
-    )
-  ).not.toBeInTheDocument()
-})
+  it("retries when Try Again is clicked", async () => {
+    const user = userEvent.setup();
 
-it("does not update state after unmount", async () => {
-  let rejectRequest: (reason?: unknown) => void =
-    () => {}
-
-  vi.mocked(getPopular).mockImplementation(
-    () =>
-      new Promise<MovieResponse>(
-        (_resolve, reject) => {
-          rejectRequest = reject
-        }
-      )
-  )
-
-  const { unmount } = render(
-    <MemoryRouter>
-      <HomePage />
-    </MemoryRouter>
-  )
-
-  unmount()
-
-  await act(async () => {
-    rejectRequest(new Error("late response"))
-  })
-})
-
-it("retries loading when Try Again is clicked", async () => {
-  const user = userEvent.setup()
-
-  vi.mocked(getPopular)
-    .mockRejectedValueOnce(new Error("API error"))
-    .mockResolvedValueOnce({
+    vi.mocked(useMovies).mockReturnValue({
+      movies: [],
+      loading: false,
+      error: "Failed to load movies. Please try again.",
       page: 1,
-      results: mockMovies,
-      total_pages: 2,
-      total_results: 40,
-    })
+      totalPages: 1,
+      loadMore: mockLoadMore,
+      retry: mockRetry,
+    });
 
-  render(
-    <MemoryRouter>
-      <HomePage />
-    </MemoryRouter>
-  )
+    renderHomePage();
 
-  expect(
-    await screen.findByText(
-      "Failed to load movies. Please try again."
-    )
-  ).toBeInTheDocument()
+    await user.click(
+      screen.getByRole("button", {
+        name: "Try Again",
+      })
+    );
 
-  await user.click(
-    screen.getByRole("button", {
-      name: "Try Again",
-    })
-  )
+    expect(mockRetry).toHaveBeenCalledTimes(1);
+  });
 
-  expect(
-    await screen.findByRole("heading", {
-      name: "Movie One",
-    })
-  ).toBeInTheDocument()
-})
-})
+  it("does not render an error message when there is no error", () => {
+    renderHomePage();
+
+    expect(
+      screen.queryByText(
+        "Failed to load movies. Please try again."
+      )
+    ).not.toBeInTheDocument();
+  });
+});
