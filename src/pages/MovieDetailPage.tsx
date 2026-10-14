@@ -54,7 +54,6 @@ export default function MovieDetailPage() {
       </Link>
 
       <div className="grid md:grid-cols-[260px_1fr] gap-8">
-        {/* Poster */}
         {movie.poster_path? (
           <img
             src={getPosterUrl(movie.poster_path) || ""}
@@ -74,7 +73,6 @@ export default function MovieDetailPage() {
             {director && ` • Director: ${director.name}`}
           </p>
 
-          {/* Synopsis */}
           <div className="mt-6">
             <h2 className="text-xs font-bold uppercase tracking-widest text-slate-500">Synopsis</h2>
             <p className="mt-2 leading-relaxed text-slate-300">
@@ -82,7 +80,6 @@ export default function MovieDetailPage() {
             </p>
           </div>
 
-          {/* Genres */}
           {movie.genres?.length > 0 && (
             <div className="mt-6 flex flex-wrap gap-2">
               {movie.genres.map((g) => (
@@ -93,13 +90,11 @@ export default function MovieDetailPage() {
             </div>
           )}
 
-          {/* Director */}
           <div className="mt-6 p-4 rounded-2xl border border-slate-800 bg-slate-900/40">
             <p className="text-xs uppercase tracking-widest text-slate-500">Director</p>
             <p className="font-semibold mt-1">{director?.name || "Unknown"}</p>
           </div>
 
-          {/* Main Cast */}
           {mainCast.length > 0 && (
             <div className="mt-8">
               <h2 className="text-xs font-bold uppercase tracking-widest text-slate-500 mb-4">Main Cast</h2>
