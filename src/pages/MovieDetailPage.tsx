@@ -109,7 +109,7 @@ export default function MovieDetailPage() {
                       </div>
                     )}
                     <p className="mt-2 text-xs font-semibold truncate">{actor.name}</p>
-                    <p className="text- text-slate-500 truncate">{actor.character}</p>
+                    <p className="text-[11px] text-slate-500 truncate">{actor.character}</p>
                   </div>
                 ))}
               </div>

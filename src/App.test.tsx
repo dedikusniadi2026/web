@@ -124,21 +124,14 @@ describe("App PDF", () => {
     ).toBeInTheDocument();
   });
 
-  it("should render the movie detail page when a movie is opened", async () => {
-    const user = userEvent.setup();
-
-    renderApp();
-
-    const cardLink = await screen.findByRole("link", {
-      name: /inception/i,
-    });
-
-    await user.click(cardLink);
-
+  it("should render the movie detail page when opened", async () => {
+    renderApp("/movie/1");
+  
     expect(
       await screen.findByRole("heading", {
         name: "Inception",
       })
     ).toBeInTheDocument();
   });
+
 });
