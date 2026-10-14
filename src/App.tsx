@@ -1,71 +1,47 @@
 import { lazy, Suspense } from "react";
-import {
-  BrowserRouter,
-  Routes,
-  Route,
-} from "react-router-dom";
+import { Routes, Route } from "react-router-dom";
 
 import Loading from "./components/Loading";
 import ScrollToTop from "./components/ScrollToTop";
-import Footer from "./components/Footer";
+import ErrorBoundary from "./components/ErrorBoundary"; // senior wajib ada
+import MainLayout from "./layouts/MainLayout";
 
-const HomePage = lazy(
-  () => import("./pages/HomePage")
-)
-const MovieDetailPage = lazy(
-  () => import("./pages/MovieDetailPage")
-)
-const WatchlistPage = lazy(
-  () => import("./pages/WatchlistPage")
-)
-const NotFoundPage = lazy(
-  () => import("./pages/NotFoundPage")
-)
+// Senior: kasih nama chunk biar kebaca di build, bukan angka 0.js 1.js
+const HomePage = lazy(() => import("./pages/HomePage" /* webpackChunkName: "home" */));
+const MovieDetailPage = lazy(() => import("./pages/MovieDetailPage" /* webpackChunkName: "detail" */));
+const NotFoundPage = lazy(() => import("./pages/NotFoundPage"));
+
+const ROUTES = {
+  HOME: "/",
+  DETAIL: "/movie/:movieId",
+} as const;
 
 function App() {
   return (
-    <BrowserRouter>
+    <>
       <ScrollToTop />
-
-      <Suspense
-        fallback={
-          <div className="min-h-screen bg-gray-950">
-            <Loading />
-          </div>
-        }
-      >
-        <Routes>
-          <Route
-            path="/"
-            element={<HomePage />
+      <ErrorBoundary>
+        <Suspense
+          fallback={
+            <div className="min-h-screen bg-gray-950 grid place-items-center">
+              <Loading />
+            </div>
           }
-          />
+        >
+          <Routes>
+            {/* Layout biar Navbar/Footer gak ikut re-render / suspense */}
+            <Route element={<MainLayout />}>
+              <Route path={ROUTES.HOME} element={<HomePage />} />
+              <Route path={ROUTES.DETAIL} element={<MovieDetailPage />} />
+            </Route>
 
-          <Route
-            path="/movie/:movieId"
-            element={
-              <MovieDetailPage />
-            }
-          />
-
-          <Route
-            path="/watchlist"
-            element={<WatchlistPage />
-          }
-          />
-
-          <Route
-            path="*"
-            element={
-              <NotFoundPage />
-            }
-          />
-        </Routes>
-
-        <Footer />
-      </Suspense>
-    </BrowserRouter>
-  )
+            {/* 404 di luar layout, biar full page */}
+            <Route path="*" element={<NotFoundPage />} />
+          </Routes>
+        </Suspense>
+      </ErrorBoundary>
+    </>
+  );
 }
 
-export default App
+export default App;
