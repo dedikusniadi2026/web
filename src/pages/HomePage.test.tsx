@@ -18,7 +18,6 @@ import HomePage from "./HomePage";
 import { useMovies } from "../hooks/useMovies";
 import { useInfiniteScroll } from "../hooks/useInfiniteScroll";
 
-import type { MovieResponse } from "../types/movie";
 
 vi.mock("../hooks/useMovies", () => ({
   useMovies: vi.fn(),
